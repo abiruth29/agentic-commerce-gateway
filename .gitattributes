@@ -1,0 +1,8 @@
+# The repo is authored on Windows and built in a Linux container. Normalise to
+# LF in the index so the Dockerfile and anything shell-invoked stay valid there.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.db binary
