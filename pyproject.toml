@@ -17,3 +17,8 @@ dependencies = [
 
 [tool.setuptools]
 packages = ["acg"]
+
+# Vercel only auto-detects entrypoints at a few conventional paths (main.py,
+# app/main.py, ...). The app lives in a package, so point at it explicitly.
+[tool.vercel]
+entrypoint = "acg.main:app"

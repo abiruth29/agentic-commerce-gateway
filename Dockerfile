@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=7860
+    PORT=8000
 
 WORKDIR /app
 
@@ -19,8 +19,9 @@ RUN useradd --create-home --uid 1000 appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 7860
+EXPOSE 8000
 
-# $PORT is injected by Railway and Fly; Hugging Face Spaces expects 7860, which
-# is the default above. One entrypoint satisfies all three.
-CMD ["sh", "-c", "uvicorn acg.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
+# The hosted deployment runs on Vercel, which does not use this file. The image
+# exists for local reproduction and for any container host, which typically
+# injects its own $PORT.
+CMD ["sh", "-c", "uvicorn acg.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
