@@ -19,6 +19,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from acg.domain.category import normalise_category
 from acg.domain.money import Money
 
 
@@ -83,17 +84,16 @@ class Mandate(BaseModel):
     @field_validator("allowed_categories", mode="before")
     @classmethod
     def _normalise_categories(cls, value: object) -> object:
-        """Casefold and strip category names at the boundary.
+        """Normalise category names at the boundary.
 
         Done once here rather than inside each rule that compares a category,
-        so that "Skincare" in a mandate and "skincare" on an item cannot become
-        either a false block or a bypass depending on which rule ran.
+        and through the shared normaliser rather than a local copy, so that
+        "Skincare" in a mandate and "skincare" on an item cannot become either
+        a false block or a bypass depending on which side ran.
         """
         if isinstance(value, str):
-            # ValueError, not TypeError: pydantic converts ValueError and
-            # AssertionError into ValidationError, and lets anything else
-            # escape the model. A caller catching ValidationError should not
-            # have to also catch TypeError to handle malformed input.
+            # A bare string would otherwise iterate into single characters,
+            # turning "skincare" into eight one-letter categories.
             raise ValueError(
                 "allowed_categories must be a collection of category names, "
                 "not a single string"
@@ -101,17 +101,7 @@ class Mandate(BaseModel):
         if not isinstance(value, (list, tuple, set, frozenset)):
             return value
 
-        normalised = set()
-        for category in value:
-            if not isinstance(category, str):
-                raise ValueError(
-                    f"category must be a str, got {type(category).__name__}"
-                )
-            cleaned = category.strip().casefold()
-            if not cleaned:
-                raise ValueError("category must not be blank")
-            normalised.add(cleaned)
-        return frozenset(normalised)
+        return frozenset(normalise_category(category) for category in value)
 
     @model_validator(mode="after")
     def _expiry_follows_creation(self) -> "Mandate":
