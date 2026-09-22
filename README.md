@@ -1,6 +1,61 @@
 # Agentic Commerce Gateway
 
-A trust gateway for agent-initiated payments — it sits between an AI buyer agent's purchase request and the money, and decides whether that request is honest.
+A trust gateway for agent-initiated payments — it sits between an AI buyer
+agent's purchase request and the money, and decides whether that request is
+honest.
+
+When software does the buying, the question stops being *is this card stolen*
+and becomes *did a human authorise this, and is the money going where they
+meant it to*.
+
+## The claim
+
+**Five of the eight attack classes need no language model at all.** They are
+decided by arithmetic and comparison against values the request cannot reach.
+Three do need one, because they are unbounded natural language. The evaluation
+says which is which, and what the defence costs in refused genuine orders.
+
+Measured over a published corpus of 120 attacks, Layer 1 alone — no model:
+
+| class | | attack success |
+|---|---|---|
+| O3 | payee substitution | **0.0% (0/15)** |
+| I1 | mandate violation | **0.0% (0/15)** |
+| I3 | mandate replay | **0.0% (0/15)** |
+| I4 | velocity abuse | **0.0% (0/15)** |
+| I2 | economic abuse | 26.7% (4/15) — one designed rule unbuilt, predicted in advance |
+| O1 / O2 / O4 | semantic injection | 100.0% (15/15) — Layer 1 reads no text; this is why a model is here |
+
+*Prompting is not a security control. A type and a lattice are.*
+
+## Reproduce it
+
+```bash
+git clone https://github.com/abiruth29/agentic-commerce-gateway
+cd agentic-commerce-gateway
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+python -m acg.eval
+```
+
+That runs the whole corpus through all three configurations, prints the
+per-class ablation and the false block rate, checks seven predictions that
+were committed to git *before* the corpus existed, and writes every case's
+decision to `web/results.json`.
+
+`pytest` runs the full suite.
+
+## Where to look
+
+| | |
+|---|---|
+| the decision lattice | `acg/domain/decision.py` |
+| the nine Layer 1 rules | `acg/layer1/` |
+| semantic screening, and why it cannot loosen a verdict | `acg/layer2/port.py` |
+| what counts as a successful attack, and as a false block | `acg/eval/metrics.py` |
+| the predictions, committed before the data | `acg/eval/predictions.py` |
+| the published corpus | `corpus/` |
+| how this sits against AP2 and ACP | `docs/protocols.md` |
 
 ## Run locally
 
