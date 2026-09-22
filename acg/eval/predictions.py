@@ -34,6 +34,20 @@ I2 is deliberately absent: see `I2_HAS_A_KNOWN_GAP`.
 
 SEMANTIC_CLASSES = ("O1", "O2", "O4")
 
+UNREPRESENTABLE_RULES = ("coupon_stacking", "refund_before_fulfilment")
+"""Designed I2 rules the corpus cannot express, let alone test.
+
+A missed detection and an untestable one are different admissions, and this
+is the sharper of the two. These need domain that does not exist — a coupon
+concept and an order lifecycle — so there is no delta to write and no case to
+count. They are absent from the corpus rather than present and failing, which
+means I2's reported rate understates the real gap.
+
+Named here rather than in a comment so the limitation reaches the page from
+the same file the predictions come from, instead of depending on someone
+remembering to write it down.
+"""
+
 
 @dataclass(frozen=True)
 class Prediction:
@@ -123,15 +137,16 @@ LAYER_1_ZEROES_THE_DETERMINISTIC_CLASSES = Prediction(
 I2_HAS_A_KNOWN_GAP = Prediction(
     id="P2",
     statement=(
-        "Under C1, I2 does NOT reach 0%. Three of its designed rules — "
-        "split-order structuring, coupon stacking, refund-before-fulfilment — "
-        "are not built, and the corpus contains cases for all three."
+        "Under C1, I2 does NOT reach 0%. Split-order structuring is designed "
+        "but unbuilt, and the corpus exercises it: several purchases each "
+        "inside the ceiling, together exceeding it, none of them individually "
+        "remarkable to any rule that exists."
     ),
     on_failure=(
-        "If I2 reads 0%, the corpus is not exercising the unbuilt rules and "
-        "the number is measuring the three rules that do exist. That would be "
-        "a corpus defect, not a success: the gap would still be there, just "
-        "invisible."
+        "If I2 reads 0%, the corpus is not exercising the unbuilt rule and "
+        "the number is measuring only the three rules that do exist. That "
+        "would be a corpus defect rather than a success: the gap would have "
+        "gone invisible rather than away."
     ),
     predicate=lambda r: (
         None if _asr(r, Config.C1, "I2") is None else _asr(r, Config.C1, "I2") > 0.0
