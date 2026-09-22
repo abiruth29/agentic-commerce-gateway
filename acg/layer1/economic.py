@@ -21,6 +21,7 @@ join is what turns three quiet ALLOWs and one loud BLOCK into a blocked
 request, and `blocking` is what names the rule that decided it.
 """
 
+from acg.domain.decision import Decision
 from acg.domain.money import Money
 from acg.domain.request import OrderLine, PurchaseRequest
 from acg.layer1.rules import EvaluationContext, Finding
@@ -80,9 +81,16 @@ class QuantityRule:
         Returns:
             A Finding carrying ALLOW or BLOCK.
         """
-        raise NotImplementedError(
-            "QuantityRule.evaluate is written by hand — "
-            "see tests/layer1/test_economic_rules.py"
+        orderable = all(line.quantity >= 1 for line in request.lines)
+        return Finding(
+            rule_id=self.rule_id,
+            attack_class=self.attack_class,
+            decision=Decision.ALLOW if orderable else Decision.BLOCK,
+            reason=(
+                "every line orders at least one item"
+                if orderable
+                else "a line orders fewer than one item"
+            ),
         )
 
 
@@ -124,9 +132,23 @@ class PriceIntegrityRule:
         Returns:
             A Finding carrying ALLOW or BLOCK.
         """
-        raise NotImplementedError(
-            "PriceIntegrityRule.evaluate is written by hand — "
-            "see tests/layer1/test_economic_rules.py"
+
+        def published(line: OrderLine) -> bool:
+            item = context.items.get(line.item_id)
+            # An unknown item fails closed: a price that cannot be checked is
+            # not a price that passes.
+            return item is not None and line.unit_price == item.price
+
+        honest = all(published(line) for line in request.lines)
+        return Finding(
+            rule_id=self.rule_id,
+            attack_class=self.attack_class,
+            decision=Decision.ALLOW if honest else Decision.BLOCK,
+            reason=(
+                "every line is priced at the merchant's published price"
+                if honest
+                else "a line is not priced at the merchant's published price"
+            ),
         )
 
 
@@ -175,7 +197,29 @@ class TotalIntegrityRule:
         Returns:
             A Finding carrying ALLOW or BLOCK.
         """
-        raise NotImplementedError(
-            "TotalIntegrityRule.evaluate is written by hand — "
-            "see tests/layer1/test_economic_rules.py"
+        summed = Money.zero()
+        for line in request.lines:
+            part = line_total(line)
+            if part is None:
+                # The sum is meaningless, which is the quantity rule's axis
+                # rather than this one's. Staying quiet keeps the finding
+                # attributable; the join still blocks the request.
+                return Finding(
+                    rule_id=self.rule_id,
+                    attack_class=self.attack_class,
+                    decision=Decision.ALLOW,
+                    reason="total not checked: a line quantity is unorderable",
+                )
+            summed = summed + part
+
+        consistent = request.quoted_total == summed
+        return Finding(
+            rule_id=self.rule_id,
+            attack_class=self.attack_class,
+            decision=Decision.ALLOW if consistent else Decision.BLOCK,
+            reason=(
+                "quoted total matches the sum of the lines"
+                if consistent
+                else "quoted total does not match the sum of the lines"
+            ),
         )
