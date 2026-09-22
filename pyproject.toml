@@ -21,6 +21,12 @@ dev = [
     "pytest==9.1.1",
     "httpx==0.28.1",  # required by FastAPI's TestClient
     "ruff==0.16.8",
+    # The build backend, needed at test time by tests/test_packaging.py, which
+    # asks setuptools what it would collect rather than reimplementing
+    # discovery and asserting against a model of it. pip builds in isolation,
+    # so the backend declared in [build-system] never lands in the runtime
+    # environment and has to be declared here as well.
+    "setuptools==80.9.0",
 ]
 
 # Discovery rather than an explicit list. An explicit list silently omits any
