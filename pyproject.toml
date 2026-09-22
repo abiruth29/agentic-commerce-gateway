@@ -20,9 +20,18 @@ dependencies = [
     "google-genai==2.24.0",
 ]
 
-# Development only. Never installed in the deployed function.
 [project.optional-dependencies]
+# The MCP server is a local stdio tool, not part of the hosted application.
+# Kept out of the runtime dependencies so the serverless bundle does not carry
+# a stdio server it will never run.
+mcp = [
+    "fastmcp==2.2.0",
+]
+
+# Development only. Never installed in the deployed function. Includes the mcp
+# extra so CI exercises the server rather than letting it rot unimported.
 dev = [
+    "fastmcp==2.2.0",
     "pytest==9.1.1",
     "httpx==0.28.1",  # required by FastAPI's TestClient
     "ruff==0.16.8",

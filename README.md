@@ -15,6 +15,11 @@ decided by arithmetic and comparison against values the request cannot reach.
 Three do need one, because they are unbounded natural language. The evaluation
 says which is which, and what the defence costs in refused genuine orders.
 
+*Need no model* is a claim about the design, not a claim that all five are
+finished. Four are at zero below. The fifth, I2, is short three rules — and
+those three are arithmetic too, so the partition holds even where the
+implementation does not yet.
+
 Measured over a published corpus of 120 attacks, Layer 1 alone — no model:
 
 | class | | attack success |
@@ -268,3 +273,36 @@ applies to the page and not only to the API. Serving `web/` as static assets
 would put the evidence on the CDN and leave only `/api/*` on the function;
 that is a deployment change, and it is not made here because it cannot be
 verified without deploying.
+
+## The gateway as an agent tool (MCP)
+
+```bash
+pip install -e ".[mcp]"
+python -m acg.mcp_server
+```
+
+An MCP server over stdio, exposing two tools: `evaluate_purchase` and
+`describe_rules`. This is the demonstration that the thesis survives contact
+with a real agent loop — the buyer agent is the *caller*, and it cannot reach
+the money except through a tool that runs the rules first. The agent may be
+carrying injected instructions, may be arguing for the purchase, may be
+confidently wrong. None of it changes the verdict, because the verdict is a
+fold over deterministic rules and a lattice join, not a negotiation.
+
+Two things it deliberately does:
+
+- **It offers no way to set the destination account.** An agent can ask to pay
+  a different `payee_id` — that argument exists so the O3 rule can refuse it —
+  but nothing in the interface reaches `Merchant.registered_payee_id`. A tool
+  that let its caller supply both sides of that comparison would be theatre.
+  The signature is the control, and a test asserts it.
+- **It returns findings, not just a verdict.** An agent told only "BLOCK" will
+  retry, because it has no way to know what was wrong. One told which rule
+  fired and why can tell its user. `describe_rules` also reports the three
+  rules that are *not* built, because an agent that believes the partition is
+  complete will trust an `ALLOW` more than it should.
+
+`fastmcp` is an optional extra, not a runtime dependency: the hosted function
+has no use for a stdio server and a serverless bundle should not carry one.
+The dev extra installs it, so CI exercises the server rather than letting it
+rot unimported.
