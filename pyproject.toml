@@ -13,6 +13,7 @@ dependencies = [
     "uvicorn[standard]==0.34.0",
     "pydantic==2.10.4",
     "python-dotenv==1.0.1",
+    "razorpay==2.0.1",
 ]
 
 # Development only. Never installed in the deployed function.
