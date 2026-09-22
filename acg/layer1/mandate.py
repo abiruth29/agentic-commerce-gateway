@@ -6,6 +6,7 @@ None of them needs a model. "₹1,500, skincare, one-time" is a set of bounds,
 and a bound is arithmetic.
 """
 
+from acg.domain.decision import Decision
 from acg.domain.request import PurchaseRequest
 from acg.layer1.rules import EvaluationContext, Finding
 
@@ -24,21 +25,19 @@ class MandateAmountRule:
 
     def evaluate(self, request: PurchaseRequest, context: EvaluationContext) -> Finding:
         """Compare the quoted total against the mandate's inclusive ceiling."""
-        decision = (
-            context.mandate.max_amount >= request.quoted_total
-            and __import__("acg.domain.decision", fromlist=["Decision"]).Decision.ALLOW
-            or __import__("acg.domain.decision", fromlist=["Decision"]).Decision.BLOCK
-        )
-        reason = (
-            "quoted total is within the mandate amount ceiling"
-            if decision.name == "ALLOW"
-            else "quoted total exceeds the mandate amount ceiling"
-        )
+        # A conditional expression rather than `cond and ALLOW or BLOCK`: that
+        # idiom needs its middle term to be truthy, and Decision.ALLOW is 0.
+        # It therefore returned BLOCK for every request, at any amount.
+        within_ceiling = context.mandate.max_amount >= request.quoted_total
         return Finding(
             rule_id=self.rule_id,
             attack_class=self.attack_class,
-            decision=decision,
-            reason=reason,
+            decision=Decision.ALLOW if within_ceiling else Decision.BLOCK,
+            reason=(
+                "quoted total is within the mandate amount ceiling"
+                if within_ceiling
+                else "quoted total exceeds the mandate amount ceiling"
+            ),
         )
 
 
@@ -56,8 +55,6 @@ class MandateCategoryRule:
             if item is None or item.category not in context.mandate.allowed_categories:
                 allowed = False
                 break
-
-        from acg.domain.decision import Decision
 
         return Finding(
             rule_id=self.rule_id,
@@ -79,8 +76,6 @@ class MandateWindowRule:
 
     def evaluate(self, request: PurchaseRequest, context: EvaluationContext) -> Finding:
         """Check the evaluation time against the mandate's half-open window."""
-        from acg.domain.decision import Decision
-
         mandate = context.mandate
         valid = mandate.created_at <= context.now < mandate.expires_at
         return Finding(
