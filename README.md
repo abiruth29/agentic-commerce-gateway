@@ -85,7 +85,8 @@ python -m acg.eval
 
 One command, no arguments. It runs the published corpus through three
 configurations, prints the per-class ablation, and writes every case's decision
-to `results/`.
+to `web/results.json` — the same file the hosted page reads, so the table a
+reviewer sees and the file anyone can recompute from are one artifact.
 
 **The corpus is published**, in `corpus/`. 120 attacks — eight classes × 15,
 split 60/60 into a seed half and a held-out half — plus 60 benign flows, half
@@ -130,7 +131,7 @@ rule returns a Finding at all" is a place to start.
 
 ### Reproducing the reportable numbers
 
-The committed `results/mock.json` was produced by the **fake screener**, which
+The committed `web/results.json` was produced by the **fake screener**, which
 matches nine marker phrases. Its O1/O2/O4 figures measure the marker list, not
 a model, and must not be quoted — the run says so itself, and the flag
 `semantic_numbers_are_reportable` travels inside the results file.
@@ -143,12 +144,13 @@ from dotenv import load_dotenv; load_dotenv('.env')
 import os, sys
 os.environ['MOCK_MODE'] = 'false'
 from acg.eval.__main__ import main
-sys.exit(main(['--out', 'results/gemini.json']))
+sys.exit(main())
 "
 ```
 
 Pass `.env` to `load_dotenv` explicitly, for the reason given under the
-Razorpay section above.
+Razorpay section above. It overwrites `web/results.json`, so the page then
+shows real figures and drops its own disclaimer — commit the result.
 
 Two of the seven predictions — P4 (the model lowers O1/O2/O4) and P5 (the false
 block rate rises) — **cannot be tested by a mock run at all**, and the
@@ -175,3 +177,39 @@ out to test.
 - **The gateway trusts the merchant's category.** An item mis-categorised at
   source passes the mandate category check, and no corpus case can test that,
   because the corpus has no way to disagree with the catalog.
+
+## The console
+
+The hosted page is the evidence, with the gateway embedded in it rather than
+standing in for it. The claim and the ablation are above the fold; the panel
+below lets you put any of the 180 published cases — or your own catalog text —
+through the real rule engine and see which rule fired and why.
+
+Every verdict on the page comes from `/api/evaluate`, which runs the same
+`ALL_RULES` and the same lattice join the evaluation measured. Nothing decides
+anything in the browser: a second implementation could disagree with the
+measured one, and a demo that disagrees with its own results is worse than no
+demo. Sixty tests replay the corpus through the endpoint and compare it
+against the engine directly.
+
+### Layer 2 is stubbed in the hosted deployment
+
+With no `GEMINI_API_KEY` set, `build_content_screener` returns the fake, and
+the console says so in a banner before it shows any verdict. This matters:
+with the stub, an O1 case comes back `ALLOW`, and without the caption that
+reads as the gateway missing an obvious injection rather than as the model not
+being connected. Layer 1 is unaffected — no model is involved in the five
+deterministic classes, which is the point of the partition.
+
+To run the hosted console for real, set `GEMINI_API_KEY` and `MOCK_MODE=false`
+in the deployment's environment. The banner disappears on its own, because it
+is driven by `/api/rules` rather than written into the page.
+
+### What the page costs to open
+
+The whole app — page, results file and API — is served by one Python function
+on Vercel (`[tool.vercel] entrypoint` in `pyproject.toml`), so a cold start
+applies to the page and not only to the API. Serving `web/` as static assets
+would put the evidence on the CDN and leave only `/api/*` on the function;
+that is a deployment change, and it is not made here because it cannot be
+verified without deploying.

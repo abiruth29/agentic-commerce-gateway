@@ -24,6 +24,25 @@ EXTERNAL_REF = re.compile(
     r"""|url\(\s*["']?//"""
 )
 
+XML_NAMESPACES = frozenset(
+    {
+        "http://www.w3.org/2000/svg",
+        "http://www.w3.org/1999/xlink",
+    }
+)
+"""URIs that are identifiers rather than addresses.
+
+An `xmlns` value is never fetched — it names a vocabulary, and the string is
+fixed by the specification. Excluding exactly these two, by full match rather
+than by prefix, keeps an inline SVG legal without weakening the guard: any
+other w3.org URL, and any URL that merely contains one of these as a prefix,
+still fails.
+"""
+
+
+def _external_refs(text: str) -> list[str]:
+    return [ref for ref in EXTERNAL_REF.findall(text) if ref not in XML_NAMESPACES]
+
 
 def _served_paths() -> list[str]:
     paths: list[str] = []
@@ -62,8 +81,17 @@ def test_served_content_has_no_external_references(
     response = client.get(path)
     assert response.status_code == 200, f"{path} is not servable"
 
-    found = EXTERNAL_REF.findall(response.text)
+    found = _external_refs(response.text)
     assert not found, f"{path} references external hosts: {found}"
+
+
+def test_the_namespace_exclusion_is_narrow() -> None:
+    # Guards the exemption. It must cover the two fixed namespace strings and
+    # nothing that merely looks like them.
+    assert _external_refs('xmlns="http://www.w3.org/2000/svg"') == []
+    assert _external_refs('src="http://www.w3.org/2000/svg/evil.js"')
+    assert _external_refs('src="http://www.w3.org/"')
+    assert _external_refs('src="https://cdn.example.com/x.js"')
 
 
 @pytest.mark.parametrize("path", ["/docs", "/redoc"])

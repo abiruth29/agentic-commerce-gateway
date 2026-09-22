@@ -20,7 +20,13 @@ from acg.eval.predictions import UNREPRESENTABLE_RULES, check_all
 from acg.eval.runner import RunResult, run, to_dict
 from acg.layer2 import build_content_screener
 
-RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / "results"
+WEB_DIR = Path(__file__).resolve().parent.parent.parent / "web"
+"""The results file is written where the page serves it from.
+
+One artifact rather than a canonical copy and a published copy that can
+drift apart. It also means the table the page shows is a static file on a
+CDN: a reviewer sees the numbers before any Python process wakes up.
+"""
 
 CLASS_ORDER = ("O1", "O2", "O3", "O4", "I1", "I2", "I3", "I4")
 SEMANTIC = {"O1", "O2", "O4"}
@@ -138,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=RESULTS_DIR / "latest.json",
+        default=WEB_DIR / "results.json",
         help="where to write the results file",
     )
     parser.add_argument(
