@@ -61,6 +61,4 @@ def combine(first: Decision, second: Decision) -> Decision:
     Returns:
         The more restrictive of `first` and `second`.
     """
-    raise NotImplementedError(
-        "combine() is written by hand — see tests/domain/test_decision.py"
-    )
+    return first if first >= second else second
