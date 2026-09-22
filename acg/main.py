@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from acg import __version__
+from acg.api import router
 
 # Local development reads .env; in deployment these come from host secrets and
 # there is no file to find, which load_dotenv treats as a no-op.
@@ -40,6 +41,11 @@ def health() -> dict[str, str]:
     process is up — not to tell you the system is healthy.
     """
     return {"status": "ok", "version": __version__}
+
+
+# Registered before the static mount so these paths win over a file that
+# happened to share a name.
+app.include_router(router)
 
 
 # Mounted last and at the root so it only catches paths no API route claimed;
