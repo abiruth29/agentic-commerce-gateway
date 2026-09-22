@@ -12,6 +12,7 @@ That is the claim the project makes about its partition: the most financially
 dangerous class is the one most obviously deterministic.
 """
 
+from acg.domain.decision import Decision
 from acg.domain.request import PurchaseRequest
 from acg.layer1.rules import EvaluationContext, Finding
 
@@ -53,7 +54,20 @@ class PayeeSubstitutionRule:
             A Finding carrying ALLOW or BLOCK, this rule's id and class, and a
             reason naming what was compared.
         """
-        raise NotImplementedError(
-            "PayeeSubstitutionRule.evaluate is written by hand — "
-            "see tests/layer1/test_payee.py"
+        registered_payee_id = context.merchant.registered_payee_id
+        requested_payee_id = request.payee_id
+
+        if requested_payee_id == registered_payee_id:
+            return Finding(
+                rule_id=self.rule_id,
+                attack_class=self.attack_class,
+                decision=Decision.ALLOW,
+                reason="requested payee matches the merchant's registered payee",
+            )
+
+        return Finding(
+            rule_id=self.rule_id,
+            attack_class=self.attack_class,
+            decision=Decision.BLOCK,
+            reason="requested payee does not match the merchant's registered payee",
         )
