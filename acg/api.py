@@ -264,12 +264,26 @@ def corpus() -> dict[str, Any]:
 
 @router.get("/rules")
 def rules() -> dict[str, Any]:
-    """Which rules are enforced, and which designed ones are not built.
+    """What this deployment is actually running.
 
-    The second half is the point. A console that listed only what exists would
-    let a reader infer the partition is complete.
+    Two halves, and the second is the point. A console that listed only the
+    rules that exist would let a reader infer the partition is complete, and a
+    console that did not say which screener is loaded would let a stubbed
+    Layer 2 be mistaken for a model declining to fire.
     """
     return {
+        "screener": {
+            "name": SCREENER_NAME,
+            "is_mock": IS_MOCK_SCREENER,
+            "note": (
+                "Layer 2 is stubbed in this deployment. The fake screener "
+                "matches nine marker phrases, so most real injections walk "
+                "past it and C2 returns C1's verdict unchanged. Set "
+                "GEMINI_API_KEY and MOCK_MODE=false to run it for real."
+                if IS_MOCK_SCREENER
+                else "Layer 2 is screening with a live model."
+            ),
+        },
         "enforced": [
             {"rule_id": rule.rule_id, "attack_class": rule.attack_class}
             for rule in ALL_RULES

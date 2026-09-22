@@ -71,7 +71,7 @@
       "payment_path_ms": {
         "samples": 135,
         "p50": 0.001,
-        "p95": 0.0012
+        "p95": 0.0013
       },
       "content_path_ms": {
         "samples": 0,
@@ -142,8 +142,8 @@
       },
       "payment_path_ms": {
         "samples": 180,
-        "p50": 0.0218,
-        "p95": 0.038
+        "p50": 0.0213,
+        "p95": 0.0378
       },
       "content_path_ms": {
         "samples": 0,
@@ -214,13 +214,13 @@
       },
       "payment_path_ms": {
         "samples": 180,
-        "p50": 0.0255,
-        "p95": 0.0427
+        "p50": 0.0252,
+        "p95": 0.0367
       },
       "content_path_ms": {
         "samples": 180,
         "p50": 0.0036,
-        "p95": 0.0199
+        "p95": 0.0196
       }
     }
   },
