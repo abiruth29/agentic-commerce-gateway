@@ -1,4 +1,4 @@
-"""O3 — payee substitution. The contract `PayeeSubstitutionRule` implements to.
+"""O3 — payee substitution: the contract implemented by `PayeeSubstitutionRule`.
 
 These fail until the rule is written. They are the specification.
 """

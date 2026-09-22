@@ -23,8 +23,12 @@ dev = [
     "ruff==0.16.8",
 ]
 
-[tool.setuptools]
-packages = ["acg"]
+# Discovery rather than an explicit list. An explicit list silently omits any
+# new subpackage, and editable installs — what CI and local development both
+# use — put the source tree on the path and hide the omission, so the first
+# symptom is an ImportError in a deployed build.
+[tool.setuptools.packages.find]
+include = ["acg*"]
 
 # Vercel only auto-detects entrypoints at a few conventional paths (main.py,
 # app/main.py, ...). The app lives in a package, so point at it explicitly.
