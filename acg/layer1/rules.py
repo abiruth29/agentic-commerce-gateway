@@ -17,6 +17,7 @@ from typing import Protocol, runtime_checkable
 
 from acg.domain.catalog import CatalogItem, Merchant
 from acg.domain.decision import Decision
+from acg.domain.history import PriorDecision
 from acg.domain.mandate import Mandate
 from acg.domain.request import PurchaseRequest
 
@@ -46,6 +47,20 @@ class EvaluationContext:
     Expiry and velocity windows both depend on it, so a rule that called
     datetime.now() itself would be untestable and would make two rules in the
     same evaluation disagree about when "now" is.
+    """
+
+    history: tuple[PriorDecision, ...] = ()
+    """What the gateway already decided, oldest first.
+
+    Assembled by the caller like everything else here, so a rule that needs
+    memory stays a pure function of its inputs and a replay of the same
+    evaluation reproduces the same verdict.
+
+    Defaults to empty because most rules do not need it: a rule that judges a
+    request on its own terms should not have to be handed history to ignore.
+    The obligation that cannot be checked from inside a rule is the caller's —
+    the history must reach back at least as far as the widest window any rule
+    applies, or that rule under-counts without failing.
     """
 
 
