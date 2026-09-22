@@ -176,6 +176,11 @@
         color: var(--muted);
         font-size: 0.85em;
       }
+      .quote {
+        font-size: 1.02rem;
+        line-height: 1.5;
+        margin: 0 0 0.4rem;
+      }
 
       .panel {
         background: var(--panel);
@@ -545,6 +550,63 @@
         <li class="na">loading…</li>
       </ol>
 
+      <h2>How this relates to AP2 and ACP</h2>
+      <p class="sub">
+        Two open standards for agent payments landed while this was being
+        built. Checked against the specifications rather than the launch
+        write-ups, which differ &mdash; AP2 v0.2 defines a
+        <em>Checkout Mandate</em> and a <em>Payment Mandate</em>, not the
+        Intent / Cart / Payment triple most summaries still describe.
+      </p>
+
+      <div class="claim">
+        <p style="margin-bottom: 0.5rem">
+          AP2&rsquo;s own threat model states the premise this gateway is built
+          on:
+        </p>
+        <p class="quote">
+          &ldquo;AP2 assumes that preventing prompt injection attacks is
+          infeasible. Therefore, all LLMs and Agents MUST be considered
+          potential attackers.&rdquo;
+        </p>
+        <p class="sub" style="margin-bottom: 0">
+          <span class="mono">docs/ap2/security_and_privacy_considerations.md</span>
+        </p>
+      </div>
+
+      <p>
+        So this is not an alternative to those protocols. It is the enforcement
+        a threat model like AP2&rsquo;s requires, at the layer where money
+        moves. AP2 names the threat it calls <em>Manipulated Discovery</em> &mdash;
+        &ldquo;prompt injection causes the Shopping Agent to select malicious
+        products&rdquo; &mdash; and does not specify the control. That control is
+        Layer 2 here.
+      </p>
+
+      <p>
+        <strong
+          >Both protocols constrain the payment instrument. Neither constrains
+          the purchase decision.</strong
+        >
+        ACP&rsquo;s delegated-payment allowance is
+        <code>max_amount</code>, <code>currency</code>,
+        <code>expires_at</code>, <code>checkout_session_id</code>. AP2&rsquo;s
+        open mandate is <code>checkout.line_items</code> and
+        <code>checkout.allowed_merchants</code>. Both make a leaked credential
+        nearly worthless. Neither carries what a human actually wants to say
+        &mdash; <em>&#8377;1,500, skincare, one-time</em> &mdash; so neither can
+        refuse a purchase that is correctly signed, correctly scoped, inside
+        its allowance, and simply not what was authorised. That is attack class
+        I1, and it is what this gateway&rsquo;s mandate is shaped for.
+      </p>
+
+      <p class="sub">
+        Velocity (I4) appears in neither: a protocol scoped to one transaction
+        has nowhere to notice that this is the ninth in an hour. The full
+        comparison, with every claim cited by file path, is in
+        <code>docs/protocols.md</code> in the repository.
+      </p>
+
       <h2>What this does not establish</h2>
       <ul class="limits">
         <li>
@@ -570,6 +632,16 @@
           item mis-categorised at source passes the mandate check, and no corpus
           case can test it, because the corpus has no way to disagree with the
           catalog.
+        </li>
+        <li>
+          <strong>There is no cryptography here.</strong> AP2 mandates are
+          signed credentials with key binding; ACP tokens are vaulted by a
+          payment provider. This gateway&rsquo;s mandate is a trusted local
+          record, and its integrity rests entirely on the store it lives in.
+          Against an attacker who can write to that store, every rule that
+          compares against a mandate falls at once. Adopting AP2&rsquo;s signed
+          mandates is the single most valuable thing to take from either
+          protocol, and it is not done.
         </li>
         <li>
           <strong>The corpus is small and I wrote it.</strong> Fifteen cases per

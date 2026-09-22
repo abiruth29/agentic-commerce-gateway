@@ -108,12 +108,43 @@ class TestTheLimitationsAreOnThePage:
             "unmeasured, not zero",
             "trusts the merchant",
             "I wrote it",
+            "no cryptography here",
         ],
     )
     def test_each_known_gap_is_stated(self, phrase: str) -> None:
         # Stated before a reviewer finds them, which is the whole posture of
         # the page. A limitation that only lives in the README is not stated.
         assert phrase in PAGE
+
+
+class TestTheProtocolPositioning:
+    """The page must not repeat the launch-day framing of AP2.
+
+    Most write-ups still describe an Intent / Cart / Payment mandate triple.
+    The v0.2 specification defines a Checkout Mandate and a Payment Mandate,
+    and citing the superseded names to someone who has read the spec is the
+    cheapest possible way to lose their confidence.
+    """
+
+    def test_the_page_names_the_mandates_the_spec_defines(self) -> None:
+        assert "Checkout Mandate" in PAGE
+        assert "Payment Mandate" in PAGE
+
+    def test_the_page_does_not_repeat_the_superseded_names(self) -> None:
+        assert not re.search(r"Intent Mandate", PAGE)
+        assert not re.search(r"Cart Mandate", PAGE)
+
+    def test_the_page_quotes_ap2_with_its_source(self) -> None:
+        assert "potential attackers" in PAGE
+        assert "security_and_privacy_considerations.md" in PAGE
+
+    def test_the_page_points_at_the_cited_comparison(self) -> None:
+        assert "docs/protocols.md" in PAGE
+
+    def test_the_comparison_document_exists(self) -> None:
+        doc = Path(WEB_DIR).parent / "docs" / "protocols.md"
+        assert doc.exists()
+        assert "Checkout Mandate" in doc.read_text(encoding="utf-8")
 
 
 class TestUntrustedTextIsNeverMarkup:
