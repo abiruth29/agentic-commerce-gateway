@@ -9,6 +9,9 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY acg ./acg
 COPY web ./web
+# Read at runtime by the console's /api/corpus and /api/evaluate. Without it
+# the image builds, boots and passes /health, then fails on first use.
+COPY corpus ./corpus
 
 # Installed editable on purpose: it keeps one source tree, so importlib.metadata
 # can read the version while acg/ and web/ stay resolvable from the same root.

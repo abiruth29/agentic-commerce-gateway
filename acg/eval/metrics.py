@@ -64,6 +64,16 @@ class Outcome:
     content_path_ms: float | None
     """None when this configuration screened no content."""
 
+    screening_abstained: bool = False
+    """True when Layer 2 was asked and did not answer.
+
+    The verdict for such a case is Layer 1's alone, because an abstention
+    carries the lattice identity. That is the right behaviour for the gateway
+    and the wrong thing to report as a model result, so the runner counts
+    these and refuses to call a run's semantic figures reportable if any
+    occurred.
+    """
+
     measured: bool = True
     """False when the cell is reported rather than measured.
 

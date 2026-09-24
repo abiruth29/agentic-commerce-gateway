@@ -71,7 +71,17 @@ function renderAblation(results) {
 
   const configs = results.configs;
   const mock = results.semantic_numbers_are_reportable === false;
-  if (mock) $("mock-banner").hidden = false;
+  if (mock) {
+    // The reason comes from the run, not from this page. A run that used the
+    // fake and a run in which the real model never answered are both
+    // unreportable, for different reasons, and the page must not guess which.
+    const reason = results.not_reportable_because;
+    text(
+      $("mock-reason"),
+      reason ? `They were ${reason}.` : "The run did not measure Layer 2."
+    );
+    $("mock-banner").hidden = false;
+  }
 
   for (const name of CLASS_ORDER) {
     const row = el("tr");

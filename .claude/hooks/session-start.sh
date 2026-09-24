@@ -18,7 +18,20 @@ cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}"
 # The container has no virtualenv and runs as root, which pip warns about on
 # every run. Silenced because a hook's output becomes session context, and this
 # warning describes the container, not anything wrong with the project.
-PIP_ROOT_USER_ACTION=ignore pip install --quiet --disable-pip-version-check -e ".[dev]"
+install() {
+  PIP_ROOT_USER_ACTION=ignore pip install --quiet --disable-pip-version-check "$@"
+}
+
+# The dev extra pulls in fastmcp, which needs a newer PyJWT than the one the
+# container's OS ships. pip cannot uninstall an OS-owned package ("RECORD file
+# not found"), so the whole install fails and the session starts with nothing
+# installed. When that happens, install PyJWT alongside the OS copy without
+# trying to remove it, then retry. Only done on failure, so a container
+# without the conflict is left alone.
+if ! install -e ".[dev]" 2>/dev/null; then
+  install --ignore-installed PyJWT
+  install -e ".[dev]"
+fi
 
 # The container ships general-purpose tooling (its own ruff and pytest) on PATH
 # ahead of where pip puts this project's console scripts. Left alone, `ruff`
