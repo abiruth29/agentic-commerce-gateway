@@ -196,7 +196,9 @@ matches nine marker phrases. Its O1/O2/O4 figures measure the marker list, not
 a model, and must not be quoted — the run says so itself, and the flag
 `semantic_numbers_are_reportable` travels inside the results file.
 
-For the real figures, with `GEMINI_API_KEY` set in `.env`:
+For the real figures, with `GEMINI_API_KEY` **and `GEMINI_MODEL`** set in
+`.env`. There is no default model on purpose: the previous default,
+`gemini-2.0-flash`, was shut down, and a retired model makes every call fail.
 
 ```bash
 python -c "
@@ -211,6 +213,15 @@ sys.exit(main())
 Pass `.env` to `load_dotenv` explicitly, for the reason given under the
 Razorpay section above. It overwrites `web/results.json`, so the page then
 shows real figures and drops its own disclaimer — commit the result.
+
+**A run in which the model did not answer is refused, not published.** A bad
+key, a retired model or an exhausted quota makes every screening call fail,
+every failure abstains, and every abstention carries `ALLOW` — so C2 quietly
+becomes a copy of C1. The runner counts abstentions, and if there is even one
+it prints a warning, keeps `semantic_numbers_are_reportable` false, and the
+page keeps its disclaimer with the reason. Rate limits are retried with
+backoff during the evaluation (not on the serving path, where a request is
+waiting), so a free-tier quota costs time rather than correctness.
 
 Two of the seven predictions — P4 (the model lowers O1/O2/O4) and P5 (the false
 block rate rises) — **cannot be tested by a mock run at all**, and the
@@ -261,8 +272,10 @@ reads as the gateway missing an obvious injection rather than as the model not
 being connected. Layer 1 is unaffected — no model is involved in the five
 deterministic classes, which is the point of the partition.
 
-To run the hosted console for real, set `GEMINI_API_KEY` and `MOCK_MODE=false`
-in the deployment's environment. The banner disappears on its own, because it
+To run the hosted console for real, set `GEMINI_API_KEY`, `GEMINI_MODEL` and
+`MOCK_MODE=false` in the deployment's environment. All three together: with
+`MOCK_MODE=false` and either of the others missing, the app refuses to start
+rather than serving a Layer 2 that cannot answer. The banner disappears on its own, because it
 is driven by `/api/rules` rather than written into the page.
 
 ### What the page costs to open

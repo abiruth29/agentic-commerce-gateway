@@ -13,19 +13,30 @@ useless verdicts, not unsafe ones.
 """
 
 import os
+import time
+from collections.abc import Callable
 from typing import Any, Final
 
 from acg.domain.catalog import CatalogItem
 from acg.layer2.parsing import parse_verdict
 from acg.layer2.port import ScreeningOutcome, ScreeningResult, abstention
 
-DEFAULT_MODEL: Final = "gemini-2.0-flash"
-"""Overridable with GEMINI_MODEL.
+MODEL_ENV_VAR: Final = "GEMINI_MODEL"
+"""Where the model id comes from. There is deliberately no default.
 
-Model availability changes, so this is a starting point rather than a claim.
-If the configured model is retired the screener abstains, which degrades
-detection without weakening enforcement — the failure mode this layer was
-designed around.
+There used to be one, `gemini-2.0-flash`, and Google shut that model down on
+1 June 2026. With a retired default every call fails, every failure abstains,
+every abstention carries ALLOW, and C2 silently becomes a copy of C1 — which
+the evaluation would then have published as a measured model result. A
+hard-coded model id is a fact with an expiry date, so the choice is made
+explicitly, from the current list, by whoever runs it.
+"""
+
+TRANSIENT_STATUS: Final = frozenset({408, 429, 500, 502, 503, 504})
+"""Provider errors worth waiting out: timeouts, rate limits, server faults.
+
+Everything else — a bad key, a retired model, a malformed request — will fail
+the same way on every attempt, so retrying it only delays the abstention.
 """
 
 INSTRUCTION: Final = """\
@@ -59,20 +70,30 @@ class GeminiContentScreener:
         api_key: str,
         model: str | None = None,
         client: Any | None = None,  # noqa: ANN401
+        *,
+        max_attempts: int = 1,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         """Build a screener.
 
         Args:
             api_key: Gemini API key.
-            model: model id; defaults to `GEMINI_MODEL` then `DEFAULT_MODEL`.
+            model: model id; defaults to the `GEMINI_MODEL` environment
+                variable. There is no built-in fallback — see MODEL_ENV_VAR.
             client: an already-built SDK client, for tests. Injecting one
                 keeps the request shaping and the parsing testable without a
                 network, which is where the subtle mistakes live.
+            max_attempts: how many times to try a call that fails
+                transiently. One for the serving path, where a request is
+                waiting; more for the evaluation, where a free-tier rate limit
+                would otherwise turn into a run full of abstentions.
+            sleep: how to wait between attempts. Injected so tests do not.
 
         Raises:
-            ValueError: if the key is missing. Failing at construction means a
-                misconfiguration surfaces at startup rather than as a silent
-                run of abstentions that look like the model being flaky.
+            ValueError: if the key or the model is missing. Failing at
+                construction means a misconfiguration surfaces at startup
+                rather than as a silent run of abstentions that look like the
+                model being flaky.
         """
         if not api_key:
             raise ValueError(
@@ -80,7 +101,18 @@ class GeminiContentScreener:
                 "with MOCK_MODE=true"
             )
 
-        self.model = model or os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
+        self.model = model or os.environ.get(MODEL_ENV_VAR)
+        if not self.model:
+            raise ValueError(
+                f"no Gemini model is configured; set {MODEL_ENV_VAR} to a "
+                "current model id from Google's Gemini API model list, or run "
+                "with MOCK_MODE=true"
+            )
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+
+        self.max_attempts = max_attempts
+        self._sleep = sleep
 
         if client is None:
             from google import genai  # imported here so the app starts without it
@@ -99,12 +131,8 @@ class GeminiContentScreener:
             "--- end untrusted catalog text ---"
         )
 
-        try:
-            response = self._client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-            )
-        except Exception:  # noqa: BLE001 - the SDK raises many types
+        response = self._generate(prompt)
+        if response is None:
             # Timeout, rate limit, auth, transport: all the same to the
             # gateway. The provider's message is not carried into the
             # reason, because it can quote the text under judgement.
@@ -124,3 +152,41 @@ class GeminiContentScreener:
             reason="semantic screening of the item text",
             classes=classes,
         )
+
+    def _generate(self, prompt: str) -> Any | None:  # noqa: ANN401
+        """Call the model, retrying only what is worth retrying.
+
+        Returns None when no usable response arrived, which the caller turns
+        into an abstention. JSON output is requested from the API rather than
+        only in the prompt, and temperature is pinned to zero so that a
+        re-run of the evaluation screens the same text the same way.
+        """
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                return self._client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config={
+                        "response_mime_type": "application/json",
+                        "temperature": 0,
+                    },
+                )
+            except Exception as error:  # noqa: BLE001 - the SDK raises many types
+                if attempt == self.max_attempts or not _is_transient(error):
+                    return None
+                # 2s, 4s, 8s, ... — long enough to clear a per-minute quota
+                # window within a few attempts.
+                self._sleep(float(2**attempt))
+        return None
+
+
+def _is_transient(error: Exception) -> bool:
+    """Whether an SDK error is worth waiting out.
+
+    The SDK reports HTTP status as `code`. An error without one is a transport
+    failure — a timeout or a dropped connection — and is treated as transient.
+    """
+    code = getattr(error, "code", None)
+    if code is None:
+        return True
+    return isinstance(code, int) and code in TRANSIENT_STATUS

@@ -1,5 +1,7 @@
 """S4 — the screening port, strict parsing, the cache, and the guarantee."""
 
+from pathlib import Path
+
 import pytest
 
 from acg.domain.catalog import CatalogItem
@@ -58,7 +60,7 @@ def gemini_with(text: str | None = None, raises: Exception | None = None):
     client = StubClient(
         response=StubResponse(text) if text is not None else None, raises=raises
     )
-    return GeminiContentScreener("key", client=client), client
+    return GeminiContentScreener("key", model="test-model", client=client), client
 
 
 class TestTheAbstentionInvariant:
@@ -369,6 +371,144 @@ class TestGeminiFailureHandling:
     def test_a_missing_key_fails_at_construction(self) -> None:
         with pytest.raises(ValueError, match="API key is missing"):
             GeminiContentScreener("", client=StubClient())
+
+
+class ApiError(Exception):
+    """Stands in for google.genai.errors.APIError, which carries `.code`."""
+
+    def __init__(self, code: int | None) -> None:
+        super().__init__(f"status {code}")
+        self.code = code
+
+
+class FlakyModels:
+    """Fails with the given errors in order, then answers."""
+
+    def __init__(self, errors: list[Exception], text: str) -> None:
+        self.errors = list(errors)
+        self.text = text
+        self.calls = 0
+
+    def generate_content(self, **kwargs) -> object:
+        self.calls += 1
+        if self.errors:
+            raise self.errors.pop(0)
+        return StubResponse(self.text)
+
+
+def flaky(errors: list[Exception], attempts: int):
+    client = StubClient()
+    client.models = FlakyModels(errors, '{"verdict":"block","classes":["O1"]}')
+    slept: list[float] = []
+    screener = GeminiContentScreener(
+        "key",
+        model="test-model",
+        client=client,
+        max_attempts=attempts,
+        sleep=slept.append,
+    )
+    return screener, client.models, slept
+
+
+class TestTheModelIsChosenNotAssumed:
+    """There is no default model, because a default is a fact with an expiry.
+
+    The previous default was shut down, and with it every call failed, every
+    failure abstained, and C2 silently became a copy of C1.
+    """
+
+    def test_a_missing_model_fails_at_construction(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("GEMINI_MODEL", raising=False)
+        with pytest.raises(ValueError, match="GEMINI_MODEL"):
+            GeminiContentScreener("key", client=StubClient())
+
+    def test_the_model_can_come_from_the_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GEMINI_MODEL", "from-env")
+        assert GeminiContentScreener("key", client=StubClient()).model == "from-env"
+
+    def test_an_explicit_model_wins_over_the_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GEMINI_MODEL", "from-env")
+        screener = GeminiContentScreener("key", model="explicit", client=StubClient())
+        assert screener.model == "explicit"
+
+    def test_no_retired_model_is_hard_coded(self) -> None:
+        import acg.layer2.gemini as module
+
+        assert not hasattr(module, "DEFAULT_MODEL")
+        assert 'gemini-2.0-flash"' not in Path(module.__file__).read_text()
+
+
+class TestTheRequestAsksForJson:
+    def test_json_output_is_requested_from_the_api(self) -> None:
+        screener, client = gemini_with('{"verdict":"allow","classes":[]}')
+        screener.screen(item())
+
+        config = client.models.calls[0]["config"]
+        assert config["response_mime_type"] == "application/json"
+
+    def test_temperature_is_pinned_for_reproducibility(self) -> None:
+        screener, client = gemini_with('{"verdict":"allow","classes":[]}')
+        screener.screen(item())
+
+        assert client.models.calls[0]["config"]["temperature"] == 0
+
+
+class TestTransientFailuresAreRetried:
+    def test_a_rate_limit_is_waited_out(self) -> None:
+        screener, models, slept = flaky([ApiError(429), ApiError(429)], attempts=5)
+
+        result = screener.screen(item())
+
+        assert not result.abstained
+        assert result.decision is Decision.BLOCK
+        assert models.calls == 3
+        assert slept == [2.0, 4.0]
+
+    def test_a_server_fault_is_retried(self) -> None:
+        screener, models, _ = flaky([ApiError(503)], attempts=3)
+        assert not screener.screen(item()).abstained
+        assert models.calls == 2
+
+    def test_a_transport_failure_is_retried(self) -> None:
+        screener, models, _ = flaky([TimeoutError("read timed out")], attempts=3)
+        assert not screener.screen(item()).abstained
+        assert models.calls == 2
+
+    @pytest.mark.parametrize("code", [400, 401, 403, 404])
+    def test_a_permanent_failure_is_not_retried(self, code: int) -> None:
+        # A bad key or a retired model fails the same way every time, so
+        # retrying only delays the abstention.
+        screener, models, slept = flaky([ApiError(code)], attempts=5)
+
+        assert screener.screen(item()).abstained
+        assert models.calls == 1
+        assert slept == []
+
+    def test_retries_are_bounded(self) -> None:
+        screener, models, _ = flaky([ApiError(429)] * 10, attempts=3)
+
+        assert screener.screen(item()).abstained
+        assert models.calls == 3
+
+    def test_the_serving_path_does_not_retry_by_default(self) -> None:
+        # A request is waiting on the serving path; only the evaluation
+        # opts into waiting out a quota.
+        client = StubClient()
+        client.models = FlakyModels([ApiError(429)], '{"verdict":"allow","classes":[]}')
+        screener = GeminiContentScreener("key", model="m", client=client)
+
+        assert screener.screen(item()).abstained
+        assert client.models.calls == 1
+
+    def test_attempts_must_be_positive(self) -> None:
+        with pytest.raises(ValueError, match="at least 1"):
+            GeminiContentScreener("key", model="m", client=StubClient(), max_attempts=0)
 
 
 class TestTheFactory:

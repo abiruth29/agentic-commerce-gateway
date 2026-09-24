@@ -54,15 +54,49 @@ class RunResult:
     cache_misses: int = 0
 
     @property
+    def screening_abstentions(self) -> int:
+        """C2 cases that were decided without an answer from Layer 2."""
+        return sum(
+            1 for o in self.outcomes if o.config is Config.C2 and o.screening_abstained
+        )
+
+    @property
+    def not_reportable_because(self) -> str | None:
+        """Why this run's O1/O2/O4 figures may not be quoted, or None.
+
+        Two ways a run fails to measure Layer 2, and the second is the one
+        that matters. A fake-screener run measures a marker list. A real run
+        in which the model did not answer — a retired model, a bad key, an
+        exhausted quota — measures nothing at all: every abstention carries
+        ALLOW, so C2 quietly becomes a copy of C1, and without this check it
+        would be published as the model's result.
+
+        The threshold is zero. One abstention means one semantic verdict in
+        the table is really Layer 1's, and there is no honest way to report a
+        detection rate that is partly made of cases the detector never saw.
+        """
+        if self.screener == "FakeContentScreener":
+            return (
+                "produced by the fake screener, which matches nine marker "
+                "phrases; the figures measure the marker list, not a model"
+            )
+        if self.screening_abstentions:
+            return (
+                f"Layer 2 did not answer for {self.screening_abstentions} "
+                "case(s), which were therefore decided by Layer 1 alone; "
+                "re-run once the model is reachable"
+            )
+        return None
+
+    @property
     def semantic_numbers_are_reportable(self) -> bool:
         """Whether this run's O1/O2/O4 figures may be quoted.
 
-        False for a fake-screener run. The check is a property of the result
-        rather than a note in a README, so a table generated from a fake run
-        carries its own disclaimer instead of relying on whoever writes the
-        page to remember.
+        A property of the result rather than a note in a README, so a table
+        generated from a run that did not measure Layer 2 carries its own
+        disclaimer instead of relying on whoever writes the page to remember.
         """
-        return self.screener not in {"FakeContentScreener"}
+        return self.not_reportable_because is None
 
 
 @dataclass
@@ -116,6 +150,9 @@ def run_case(
         stopped_by=verdict.stopped_by,
         payment_path_ms=payment_ms,
         content_path_ms=content_ms,
+        screening_abstained=(
+            verdict.screening is not None and verdict.screening.abstained
+        ),
         measured=not _is_unmeasured(config, case),
     )
 
@@ -151,7 +188,7 @@ def run(
     return RunResult(
         outcomes=outcomes,
         reports={config: summarise(outcomes, config) for config in configs},
-        screener=type(screener).__name__,
+        screener=type(getattr(screener, "inner", screener)).__name__,
         cache_hits=cached.hits,
         cache_misses=cached.misses,
     )
@@ -168,6 +205,8 @@ def to_dict(result: RunResult) -> dict:
         "version": 1,
         "screener": result.screener,
         "semantic_numbers_are_reportable": result.semantic_numbers_are_reportable,
+        "not_reportable_because": result.not_reportable_because,
+        "screening_abstentions": result.screening_abstentions,
         "cache": {"hits": result.cache_hits, "misses": result.cache_misses},
         "configs": {
             config.value: _report_to_dict(report)

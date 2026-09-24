@@ -36,6 +36,7 @@ def build_content_screener(
     environ: dict[str, str] | None = None,
     *,
     cached: bool = True,
+    max_attempts: int = 1,
 ) -> ContentScreener:
     """The screener this deployment should use.
 
@@ -43,14 +44,23 @@ def build_content_screener(
     Layer 2 off the payment path, so an uncached screener is the exception and
     has to be asked for.
 
+    `max_attempts` applies to the real screener only. The serving path keeps
+    the default of one, because a request is waiting on it; the evaluation
+    asks for more, because a rate limit there would otherwise become a run of
+    abstentions.
+
     Raises:
-        ValueError: when real mode is selected without a key.
+        ValueError: when real mode is selected without a key or a model.
     """
     env = os.environ if environ is None else environ
     inner: ContentScreener
     if mock_mode_enabled(env):
         inner = FakeContentScreener()
     else:
-        inner = GeminiContentScreener(api_key=env.get("GEMINI_API_KEY", ""))
+        inner = GeminiContentScreener(
+            api_key=env.get("GEMINI_API_KEY", ""),
+            model=env.get("GEMINI_MODEL"),
+            max_attempts=max_attempts,
+        )
 
     return CachingScreener(inner) if cached else inner

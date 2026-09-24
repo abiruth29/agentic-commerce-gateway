@@ -111,10 +111,8 @@ def format_limitations(result: RunResult) -> str:
 
     if not result.semantic_numbers_are_reportable:
         lines.append(
-            "  * The O1/O2/O4 rows above came from the fake screener, which "
-            "matches nine\n    marker phrases. They measure the marker list, "
-            "not a model, and must not be\n    quoted. Run with MOCK_MODE=false "
-            "and a GEMINI_API_KEY for the real figures."
+            "  * The O1/O2/O4 rows above are NOT reportable: "
+            f"{result.not_reportable_because}."
         )
     lines.append(
         "  * C0's semantic cells are unmeasured, not zero. Whether an injection "
@@ -161,10 +159,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.split != "all":
         cases = tuple(case for case in cases if case.split == args.split)
 
-    result = run(build_content_screener(cached=False), cases=cases)
+    # Five attempts with backoff, so a free-tier rate limit is waited out
+    # rather than turned into abstentions. Irrelevant to the fake.
+    result = run(build_content_screener(cached=False, max_attempts=5), cases=cases)
 
     print(f"Corpus: {len(cases)} cases ({args.split})")
     print(f"Screener: {result.screener}")
+    if result.screening_abstentions:
+        print(
+            f"\n  !! Layer 2 did not answer for {result.screening_abstentions} "
+            "case(s). Those were decided by\n  !! Layer 1 alone, so the "
+            "semantic rows below are NOT a model result.\n  !! Check "
+            "GEMINI_API_KEY and GEMINI_MODEL, then re-run."
+        )
     print(format_table(result))
     print(format_false_blocks(result))
     print(format_latency(result))

@@ -202,7 +202,7 @@ class TestTheCommand:
         cli.main(["--out", str(tmp_path / "r.json")])
         printed = capsys.readouterr().out
 
-        assert "must not be" in printed
+        assert "NOT reportable" in printed
         assert "marker phrases" in printed
 
     def test_it_states_the_limitations_without_being_asked(
@@ -268,3 +268,83 @@ class TestBenignFlowsAreNotCountedAsAttacks:
 
     def test_the_benign_denominator_is_the_benign_count(self) -> None:
         assert RESULT.reports[Config.C1].false_block_rate.denominator == 60
+
+
+class DeadScreener:
+    """A real-looking screener whose model never answers.
+
+    Named so it is not mistaken for the fake: this is what a run against a
+    retired model, a bad key or an exhausted quota looks like from the
+    runner's side.
+    """
+
+    def screen(self, item: CatalogItem) -> ScreeningResult:
+        from acg.layer2.port import abstention
+
+        return abstention(item.content_hash, "screening was unavailable")
+
+
+class SometimesDeadScreener:
+    """Answers every text but one."""
+
+    def __init__(self, dead_hash: str) -> None:
+        self.dead_hash = dead_hash
+
+    def screen(self, item: CatalogItem) -> ScreeningResult:
+        from acg.layer2.port import abstention
+
+        if item.content_hash == self.dead_hash:
+            return abstention(item.content_hash, "screening was unavailable")
+        return StubScreener().screen(item)
+
+
+class TestAnOutageCannotMasqueradeAsAResult:
+    """The failure this guards against was real, and would have been silent.
+
+    The default model was retired. Every call failed, every failure
+    abstained, every abstention carried ALLOW, C2 became a copy of C1 — and
+    because the screener was the real one, the run would have been marked
+    reportable and published as the model's measured result.
+    """
+
+    def test_a_run_where_the_model_never_answered_is_not_reportable(self) -> None:
+        result = run(DeadScreener())
+
+        assert result.screening_abstentions == len(CORPUS)
+        assert result.semantic_numbers_are_reportable is False
+        assert "did not answer" in result.not_reportable_because
+
+    def test_one_abstention_is_enough_to_withhold_the_figures(self) -> None:
+        dead = build(CORPUS[0].id, CORPUS[0].delta).item.content_hash
+        result = run(SometimesDeadScreener(dead), cases=CORPUS[:20])
+
+        assert result.screening_abstentions >= 1
+        assert result.semantic_numbers_are_reportable is False
+
+    def test_a_clean_real_run_is_reportable(self) -> None:
+        result = run(StubScreener(), cases=CORPUS[:20])
+
+        assert result.screening_abstentions == 0
+        assert result.not_reportable_because is None
+        assert result.semantic_numbers_are_reportable is True
+
+    def test_only_c2_abstentions_are_counted(self) -> None:
+        # C0 and C1 never ask Layer 2 anything, so they cannot abstain.
+        result = run(DeadScreener(), configs=(Config.C0, Config.C1))
+        assert result.screening_abstentions == 0
+
+    def test_the_reason_reaches_the_published_file(self) -> None:
+        payload = to_dict(run(DeadScreener(), cases=CORPUS[:5]))
+
+        assert payload["semantic_numbers_are_reportable"] is False
+        assert payload["screening_abstentions"] == 5
+        assert "did not answer" in payload["not_reportable_because"]
+
+    def test_a_fake_run_still_says_it_was_the_fake(self) -> None:
+        assert "fake screener" in RESULT.not_reportable_because
+
+    def test_the_cache_wrapper_does_not_hide_the_screener_name(self) -> None:
+        from acg.layer2 import CachingScreener
+
+        result = run(CachingScreener(StubScreener()), cases=CORPUS[:3])
+        assert result.screener == "StubScreener"

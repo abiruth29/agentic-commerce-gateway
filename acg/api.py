@@ -279,7 +279,8 @@ def rules() -> dict[str, Any]:
                 "Layer 2 is stubbed in this deployment. The fake screener "
                 "matches nine marker phrases, so most real injections walk "
                 "past it and C2 returns C1's verdict unchanged. Set "
-                "GEMINI_API_KEY and MOCK_MODE=false to run it for real."
+                "GEMINI_API_KEY, GEMINI_MODEL and MOCK_MODE=false to run it "
+                "for real."
                 if IS_MOCK_SCREENER
                 else "Layer 2 is screening with a live model."
             ),

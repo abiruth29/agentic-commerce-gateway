@@ -81,6 +81,18 @@ class TestTheCaveatsCannotBeDetached:
         assert 'id="mock-banner"' in PAGE
         assert 'id="mode"' in PAGE
 
+    def test_the_banner_states_the_run_s_own_reason(self) -> None:
+        # A fake run and a run in which the real model never answered are both
+        # unreportable, for different reasons. The page must not hard-code one.
+        assert "not_reportable_because" in SCRIPT
+        assert 'id="mock-reason"' in PAGE
+        banner = PAGE.split('id="mock-banner"')[1].split("</div>")[0]
+        assert "fake screener" not in banner
+
+    def test_the_results_file_carries_the_reason(self) -> None:
+        assert RESULTS["not_reportable_because"]
+        assert RESULTS["screening_abstentions"] == 0
+
     def test_the_mock_warning_is_driven_by_the_results_file(self) -> None:
         # Not hand-written into the HTML, where it could survive a real run
         # or go missing from a mock one.
@@ -97,6 +109,7 @@ class TestTheCaveatsCannotBeDetached:
         screener = client.get("/api/rules").json()["screener"]
         assert screener["is_mock"] is True
         assert "GEMINI_API_KEY" in screener["note"]
+        assert "GEMINI_MODEL" in screener["note"]
 
 
 class TestTheLimitationsAreOnThePage:
